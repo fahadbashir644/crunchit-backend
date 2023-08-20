@@ -9,6 +9,8 @@ const session = require("express-session");
 const jwt = require("jsonwebtoken");
 const User = require("./Models/User");
 const path = require('path');
+const crypto = require("crypto");
+
 
 // Serve static files from the frontend build directory
 app.use(express.static(path.join(__dirname,'public/build')));
@@ -94,6 +96,30 @@ app.post("/signup", (req, res) => {
       console.error('err2', error);
         res.status(400).send(error);
     });;
+});
+
+app.post("/ipn", (req, res) => {
+  const hmac = crypto.createHmac("sha512", "5hOWEbra7oU79ejwSpcLcEvq5cYHIC7E");
+  hmac.update(JSON.stringify(req.body, Object.keys(req.body).sort()));
+  const signature = hmac.digest("hex");
+  if (
+    req.body.payment_status === "finished" &&
+    signature === req.headers["x-nowpayments-sig"]
+  ) {
+    User.findOne({
+      email: req.body.data.email,
+    }).then((res2) => {
+      if (res2) {
+        User.findOneAndUpdate(
+          { email: req.body.data.email },
+          { balance: Number(req.body.data.balance) + Number(res2.balance) }
+        ).then((result) => {
+          console.log("updated");
+        });
+      }
+    });
+  }
+  res.json({ status: 200 });
 });
 
 const PORT = 8000;
