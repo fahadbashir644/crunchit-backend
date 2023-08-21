@@ -10,6 +10,7 @@ const jwt = require("jsonwebtoken");
 const User = require("./Models/User");
 const path = require('path');
 const crypto = require("crypto");
+const axios = require('axios');
 
 
 // Serve static files from the frontend build directory
@@ -58,12 +59,12 @@ app.use(
 app.post("/login", (req, res) => {
     User.findOne({
       email: req.body.data.email,
-    }).then((userExist) => {
-      if (userExist) {
-        const token = jwt.sign({ userId: userExist._id }, "jwtToken", {
+    }).then((user) => {
+      if (user) {
+        const token = jwt.sign({ userId: user._id }, "jwtToken", {
           expiresIn: "1h",
         });
-        res.status(200).send({ userExist, token });
+        res.status(200).send({ user, token });
       } else {
         res.status(400).send("User does not exist");
       }
@@ -81,8 +82,8 @@ app.post("/signup", (req, res) => {
                 _id: new Types.ObjectId(),
                 email: req.body.data.email,
                 password: req.body.data.password,
+                balance: 0
             });
-            console.log(user)
             user.save()
             .then((result) => {
                 res.status(200).send(result);
@@ -107,12 +108,12 @@ app.post("/ipn", (req, res) => {
     signature === req.headers["x-nowpayments-sig"]
   ) {
     User.findOne({
-      email: req.body.data.email,
+      email: req.body.email,
     }).then((res2) => {
       if (res2) {
         User.findOneAndUpdate(
-          { email: req.body.data.email },
-          { balance: Number(req.body.data.balance) + Number(res2.balance) }
+          { email: req.body.email },
+          { balance: Number(req.body.payment_amount) + Number(res2.balance) }
         ).then((result) => {
           console.log("updated");
         });
@@ -120,6 +121,37 @@ app.post("/ipn", (req, res) => {
     });
   }
   res.json({ status: 200 });
+});
+
+app.post('/topup', async (req, res) => {
+  try {
+    var config = {
+      method: 'post',
+      maxBodyLength: Infinity,
+      url: 'https://api.nowpayments.io/v1/invoice',
+      headers: { 
+        'x-api-key': 'WNY90XC-2094328-H02FN1E-2FH1DY4', 
+        'Content-Type': 'application/json'
+      },
+      data : req.body.data
+    };
+    const response = await axios(config);
+    res.json(response.data);
+  } catch(error) {
+    console.error(error);
+    res.status(500).send('An error occurred.');
+  }
+
+});
+
+app.post("/getbalance", (req, res) => {
+  User.findOne({
+    email: req.body.email,
+  }).then((res2) => {
+    if (res2) {
+      res.send({ balance: res2.balance });
+    }
+  });
 });
 
 const PORT = 8000;
