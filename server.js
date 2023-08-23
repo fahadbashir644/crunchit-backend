@@ -107,12 +107,13 @@ app.post("/ipn", (req, res) => {
     req.body.payment_status === "finished" &&
     signature === req.headers["x-nowpayments-sig"]
   ) {
+    let email = req.body.order_description;
     User.findOne({
-      email: req.body.email,
+      email: email,
     }).then((res2) => {
       if (res2) {
         User.findOneAndUpdate(
-          { email: req.body.email },
+          { email: email },
           { balance: Number(req.body.payment_amount) + Number(res2.balance) }
         ).then((result) => {
           console.log("updated");
@@ -125,6 +126,7 @@ app.post("/ipn", (req, res) => {
 
 app.post('/topup', async (req, res) => {
   try {
+    console.log(req.body);
     var config = {
       method: 'post',
       maxBodyLength: Infinity,
