@@ -11,7 +11,29 @@ const User = require("./Models/User");
 const path = require('path');
 const crypto = require("crypto");
 const axios = require('axios');
+const http = require('http').Server(app);
+const Message = require("./Models/Message");
 
+const socketIO = require('socket.io')(http, {
+  cors: {
+    origin: "http://137.184.81.218"
+  }
+});
+
+socketIO.on('connection', (socket) => {
+  console.log(`⚡: ${socket.id} user just connected!`);
+
+  socket.on('message', (data) => {
+    const { sender, receiver, text } = data;
+    const newMessage = new Message({ sender, receiver, text });
+    newMessage.save();
+    socketIO.emit('privateMessage', data);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('🔥: A user disconnected');
+  });
+});
 
 // Serve static files from the frontend build directory
 app.use(express.static(path.join(__dirname,'public/build')));
@@ -57,104 +79,175 @@ app.use(
 // Endpoints
 
 app.post("/login", (req, res) => {
-    User.findOne({
-      email: req.body.data.email,
-    }).then((user) => {
-      if (user) {
-        const token = jwt.sign({ userId: user._id }, "jwtToken", {
-          expiresIn: "1h",
-        });
-        res.status(200).send({ user, token });
-      } else {
-        res.status(400).send("User does not exist");
-      }
-    });
-});
-
-app.post("/signup", (req, res) => {
-    User.findOne({
-        email: req.body.data.email,
-    }).then((userExist) => {
-        if (userExist) {
-          res.status(402).send("Email already exists");
-        } else {
-            const user = new User({
-                _id: new Types.ObjectId(),
-                email: req.body.data.email,
-                password: req.body.data.password,
-                balance: 0
-            });
-            user.save()
-            .then((result) => {
-                res.status(200).send(result);
-            })
-            .catch((saveError) => {
-              console.error("Error saving user:", saveError);
-              res.status(400).send("Error saving user");
-            });    
-        }
-    }).catch((error) => {
-      console.error('err2', error);
-        res.status(400).send(error);
-    });;
-});
-
-app.post("/ipn", (req, res) => {
-  const hmac = crypto.createHmac("sha512", "5hOWEbra7oU79ejwSpcLcEvq5cYHIC7E");
-  hmac.update(JSON.stringify(req.body, Object.keys(req.body).sort()));
-  const signature = hmac.digest("hex");
-  if (
-    req.body.payment_status === "finished" &&
-    signature === req.headers["x-nowpayments-sig"]
-  ) {
-    let email = req.body.order_description;
-    User.findOne({
-      email: email,
-    }).then((res2) => {
-      if (res2) {
-        User.findOneAndUpdate(
-          { email: email },
-          { balance: Number(req.body.payment_amount) + Number(res2.balance) }
-        ).then((result) => {
-          console.log("updated");
-        });
-      }
-    });
-  }
-  res.json({ status: 200 });
-});
-
-app.post('/topup', async (req, res) => {
-  try {
-    console.log(req.body);
-    var config = {
-      method: 'post',
-      maxBodyLength: Infinity,
-      url: 'https://api.nowpayments.io/v1/invoice',
-      headers: { 
-        'x-api-key': 'WNY90XC-2094328-H02FN1E-2FH1DY4', 
-        'Content-Type': 'application/json'
-      },
-      data : req.body.data
-    };
-    const response = await axios(config);
-    res.json(response.data);
-  } catch(error) {
-    console.error(error);
-    res.status(500).send('An error occurred.');
-  }
-
-});
-
-app.post("/getbalance", (req, res) => {
   User.findOne({
-    email: req.body.email,
-  }).then((res2) => {
-    if (res2) {
-      res.send({ balance: res2.balance });
+    email: req.body.data.email,
+  }).then((user) => {
+    if (user) {
+      const token = jwt.sign({ userId: user._id }, "jwtToken", {
+        expiresIn: "1h",
+      });
+      res.status(200).send({ user, token });
+    } else {
+      res.status(400).send("User does not exist");
     }
   });
 });
 
+app.post("/signup", (req, res) => {
+  User.findOne({
+      email: req.body.data.email,
+  }).then((userExist) => {
+      if (userExist) {
+        res.status(402).send("Email already exists");
+      } else {
+          const user = new User({
+              _id: new Types.ObjectId(),
+              email: req.body.data.email,
+              name: req.body.data.name,
+              password: req.body.data.password,
+              isVa: req.body.data.isVa,
+              balance: 0
+          });
+          user.save()
+          .then((result) => {
+              res.status(200).send(result);
+          })
+          .catch((saveError) => {
+            console.error("Error saving user:", saveError);
+            res.status(400).send("Error saving user");
+          });    
+      }
+  }).catch((error) => {
+    console.error('err2', error);
+      res.status(400).send(error);
+  });
+});
+
+app.post("/ipn", (req, res) => {
+const hmac = crypto.createHmac("sha512", "5hOWEbra7oU79ejwSpcLcEvq5cYHIC7E");
+hmac.update(JSON.stringify(req.body, Object.keys(req.body).sort()));
+const signature = hmac.digest("hex");
+if (
+  req.body.payment_status === "finished" &&
+  signature === req.headers["x-nowpayments-sig"]
+) {
+  let email = req.body.order_description;
+  User.findOne({
+    email: email,
+  }).then((res2) => {
+    if (res2) {
+      User.findOneAndUpdate(
+        { email: email },
+        { balance: Number(req.body.payment_amount) + Number(res2.balance) }
+      ).then((result) => {
+        console.log("updated");
+      })
+    }
+  });
+}
+res.json({ status: 200 });
+});
+
+app.post('/topup', async (req, res) => {
+try {
+  var config = {
+    method: 'post',
+    maxBodyLength: Infinity,
+    url: 'https://api.nowpayments.io/v1/invoice',
+    headers: { 
+      'x-api-key': 'WNY90XC-2094328-H02FN1E-2FH1DY4', 
+      'Content-Type': 'application/json'
+    },
+    data : req.body.data
+  };
+  const response = await axios(config);
+  res.json(response.data);
+} catch(error) {
+  console.error(error);
+  res.status(500).send('An error occurred.');
+}
+
+});
+
+app.post("/getbalance", (req, res) => {
+User.findOne({
+  email: req.body.email,
+}).then((res2) => {
+  if (res2) {
+    res.send({ balance: res2.balance });
+  }
+});
+});
+
+app.post("/getAvailability", (req, res) => {
+User.findOne({
+  email: req.body.email,
+}).then((res2) => {
+  if (res2) {
+    res.send({ available: res2.available });
+  }
+});
+});
+
+app.post("/changeAvailability", (req, res) => {
+User.findOne({
+  email: req.body.email
+}).then((res2) => {
+  if (res2) {
+    User.findOneAndUpdate(
+      { email: req.body.email },
+      { available: req.body.available }
+    ).then((result) => {
+      res.status(200).send();
+    }).catch((error) => {
+        res.status(400).send(error);
+    });
+  }
+});
+});
+
+app.post("/getUsers", (req, res) => {
+User.find({
+  isVa: req.body.isVa,
+}).then((res2) => {
+  if (res2) {
+    res.send({ users: res2 });
+  }
+});
+});
+
+app.post("/pay", (req, res) => {
+User.findOne({
+  email: req.body.email
+}).then((res2) => {
+  if (res2) {
+    User.findOneAndUpdate(
+      { email: req.body.email },
+      { balance: Number(res2.balance) - Number(req.body.price) }
+    ).then((result) => {
+      res.status(200).send();
+    }).catch((error) => {
+        res.status(400).send(error);
+    });
+  }
+});
+});
+
+// Retrieve messages for a specific chat
+app.post('/getMessages', async (req, res) => {
+try {
+  const { sender, receiver } = req.body;
+  const messages = await Message.find({
+    $or: [
+      { sender: sender, receiver: receiver },
+      { sender: receiver, receiver: sender },
+    ],
+  }).sort({ timestamp: 1 });
+  res.json(messages);
+} catch (error) {
+  res.status(500).json({ error: 'Failed to retrieve messages' });
+}
+});
+
 const PORT = 8000;
-app.listen(PORT, () => console.log(`Listening on port ${PORT}`));
+http.listen(PORT, () => console.log(`Listening on port ${PORT}`));
