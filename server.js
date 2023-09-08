@@ -15,6 +15,8 @@ const http = require('http').Server(app);
 const Message = require("./Models/Message");
 const Subscription = require("./Models/Subscription");
 const hourlyRate = require("./Models/hourlyRate");
+const bcrypt = require("bcrypt");
+const saltrounds = 2;
 
 const socketIO = require('socket.io')(http, {
   cors: {
@@ -81,34 +83,44 @@ app.use(
 // Endpoints
 
 app.post("/login", (req, res) => {
-    User.findOne({
-      email: req.body.data.email,
-    }).then((user) => {
-      if (user) {
-        const token = jwt.sign({ userId: user._id }, "jwtToken", {
-          expiresIn: "1h",
-        });
-        res.status(200).send({ user, token });
-      } else {
-        res.status(400).send("User does not exist");
-      }
-    });
+  User.findOne({
+    email: req.body.data.email,
+  }).then((user) => {
+    if (user) {
+      console.log(user);
+      bcrypt.compare(req.body.data.password, user.password, (err, response) => {
+        if (response) {
+          const token = jwt.sign({ userId: user._id }, "jwtToken", {
+            expiresIn: "1h",
+          });
+          res.status(200).send({ user, token });
+        }
+      });
+    } else {
+      res.status(400).send("User does not exist");
+    }
+  });
 });
 
 app.post("/signup", (req, res) => {
-    User.findOne({
-        email: req.body.data.email,
-    }).then((userExist) => {
-        if (userExist) {
-          res.status(402).send("Email already exists");
-        } else {
+  User.findOne({
+      email: req.body.data.email,
+  }).then((userExist) => {
+      if (userExist) {
+        res.status(400).send("Email already exists");
+      } else {
+        bcrypt.hash(req.body.data.password, saltrounds, (err, hash) => {
+          if (err) {
+            console.error('err2', err);
+            res.status(400).send(err);
+          } else {
             const user = new User({
-                _id: new Types.ObjectId(),
-                email: req.body.data.email,
-                name: req.body.data.name,
-                password: req.body.data.password,
-                isVa: req.body.data.isVa,
-                balance: 0
+              _id: new Types.ObjectId(),
+              email: req.body.data.email,
+              name: req.body.data.name,
+              password: hash,
+              isVa: req.body.data.isVa,
+              balance: 0
             });
             user.save()
             .then((result) => {
@@ -118,11 +130,13 @@ app.post("/signup", (req, res) => {
               console.error("Error saving user:", saveError);
               res.status(400).send("Error saving user");
             });    
-        }
-    }).catch((error) => {
-      console.error('err2', error);
-        res.status(400).send(error);
-    });
+          }
+        });
+      }
+  }).catch((error) => {
+    console.error('err2', error);
+    res.status(400).send(error);
+  });
 });
 
 app.post("/ipn", (req, res) => {
