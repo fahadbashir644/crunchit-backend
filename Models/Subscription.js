@@ -12,6 +12,8 @@ const SubscriptionSchema = Schema({
   paymentStatus: { type: String, require: true },
   vaStatus: { type: String, require: true },
   projectStatus: { type: String, require: true },
+  enquiry: { type: String },
+  isCustom: { type: Boolean, default: false},
 });
 
 module.exports = model("Subscription", SubscriptionSchema);
