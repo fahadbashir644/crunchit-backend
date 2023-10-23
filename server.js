@@ -442,6 +442,17 @@ Subscription.find({
 });
 });
 
+app.post("/getPendingRequests", (req, res) => {
+  Subscription.find({
+    client: req.body.email,
+    projectStatus: 'pending'
+  }).then((res2) => {
+    if (res2) {
+      res.send({ subscriptions: res2 });
+    }
+  });
+}); 
+
 app.post("/getSubscriptionsOfVa", (req, res) => {
 Subscription.find({
   va: req.body.email
